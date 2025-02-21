@@ -1,30 +1,64 @@
-/* eslint-disable max-len */
 import React, { ReactNode, CSSProperties, RefObject, ChangeEvent, DragEvent } from 'react';
 import cls from 'classnames';
 import PropTypes from 'prop-types';
 import { noop, pick } from 'lodash';
-import UploadFoundation, { CustomFile, UploadAdapter, BeforeUploadObjectResult, AfterUploadResult } from '@douyinfe/semi-foundation/upload/foundation';
+import UploadFoundation from '@douyinfe/semi-foundation/upload/foundation';
 import { strings, cssClasses } from '@douyinfe/semi-foundation/upload/constants';
 import FileCard from './fileCard';
-import BaseComponent, { ValidateStatus } from '../_base/baseComponent';
+import BaseComponent from '../_base/baseComponent';
 import LocaleConsumer from '../locale/localeConsumer';
 import { IconUpload } from '@douyinfe/semi-icons';
-import { FileItem, RenderFileItemProps, UploadListType, PromptPositionType, BeforeUploadProps, AfterUploadProps, OnChangeProps, customRequestArgs, CustomError } from './interface';
+import type {
+    FileItem,
+    RenderFileItemProps,
+    UploadListType,
+    PromptPositionType,
+    BeforeUploadProps,
+    AfterUploadProps,
+    OnChangeProps,
+    customRequestArgs,
+    CustomError,
+    RenderPictureCloseProps,
+} from './interface';
 import { Locale } from '../locale/interface';
 import '@douyinfe/semi-foundation/upload/upload.scss';
 
+import type {
+    CustomFile,
+    UploadAdapter,
+    BeforeUploadObjectResult,
+    AfterUploadResult,
+    FileItemStatus
+} from '@douyinfe/semi-foundation/upload/foundation';
+import type { ValidateStatus } from '../_base/baseComponent';
+
 const prefixCls = cssClasses.PREFIX;
 
-export { FileItem, RenderFileItemProps, UploadListType, PromptPositionType, BeforeUploadProps, AfterUploadProps, OnChangeProps, customRequestArgs, CustomError, BeforeUploadObjectResult, AfterUploadResult };
+export type {
+    FileItem,
+    FileItemStatus,
+    RenderFileItemProps,
+    UploadListType,
+    PromptPositionType,
+    BeforeUploadProps,
+    AfterUploadProps,
+    OnChangeProps,
+    customRequestArgs,
+    CustomError,
+    BeforeUploadObjectResult,
+    AfterUploadResult,
+};
 
 export interface UploadProps {
     accept?: string;
     action: string;
     afterUpload?: (object: AfterUploadProps) => AfterUploadResult;
-    beforeUpload?: (object: BeforeUploadProps) => BeforeUploadObjectResult | Promise<BeforeUploadObjectResult> | boolean;
+    beforeUpload?: (
+        object: BeforeUploadProps
+    ) => BeforeUploadObjectResult | Promise<BeforeUploadObjectResult> | boolean;
     beforeClear?: (fileList: Array<FileItem>) => boolean | Promise<boolean>;
     beforeRemove?: (file: FileItem, fileList: Array<FileItem>) => boolean | Promise<boolean>;
-    capture?: boolean | string | undefined;
+    capture?: boolean | 'user' | 'environment' | undefined;
     children?: ReactNode;
     className?: string;
     customRequest?: (object: customRequestArgs) => void;
@@ -36,6 +70,7 @@ export interface UploadProps {
     dragMainText?: ReactNode;
     dragSubText?: ReactNode;
     draggable?: boolean;
+    addOnPasting?: boolean;
     fileList?: Array<FileItem>;
     fileName?: string;
     headers?: Record<string, any> | ((file: File) => Record<string, string>);
@@ -52,6 +87,7 @@ export interface UploadProps {
     onClear?: () => void;
     onDrop?: (e: Event, files: Array<File>, fileList: Array<FileItem>) => void;
     onError?: (e: CustomError, file: File, fileList: Array<FileItem>, xhr: XMLHttpRequest) => void;
+    onPastingError?: (error: Error | PermissionStatus) => void;
     onExceed?: (fileList: Array<File>) => void;
     onFileChange?: (files: Array<File>) => void;
     onOpenFileDialog?: () => void;
@@ -64,10 +100,13 @@ export interface UploadProps {
     previewFile?: (renderFileItemProps: RenderFileItemProps) => ReactNode;
     prompt?: ReactNode;
     promptPosition?: PromptPositionType;
+    picHeight?: string | number;
+    picWidth?: string | number;
     renderFileItem?: (renderFileItemProps: RenderFileItemProps) => ReactNode;
     renderPicInfo?: (renderFileItemProps: RenderFileItemProps) => ReactNode;
     renderThumbnail?: (renderFileItemProps: RenderFileItemProps) => ReactNode;
     renderPicPreviewIcon?: (renderFileItemProps: RenderFileItemProps) => ReactNode;
+    renderPicClose?: (renderPicCloseProps: RenderPictureCloseProps) => ReactNode;
     renderFileOperation?: (fileItem: RenderFileItemProps) => ReactNode;
     showClear?: boolean;
     showPicInfo?: boolean; // Show pic info in picture wall
@@ -80,7 +119,7 @@ export interface UploadProps {
     uploadTrigger?: 'auto' | 'custom';
     validateMessage?: ReactNode;
     validateStatus?: ValidateStatus;
-    withCredentials?: boolean;
+    withCredentials?: boolean
 }
 
 export interface UploadState {
@@ -89,13 +128,14 @@ export interface UploadState {
     inputKey: number;
     localUrls: Array<string>;
     replaceIdx: number;
-    replaceInputKey: number;
+    replaceInputKey: number
 }
 
 class Upload extends BaseComponent<UploadProps, UploadState> {
     static propTypes = {
         accept: PropTypes.string, // Limit allowed file types
         action: PropTypes.string.isRequired,
+        addOnPasting: PropTypes.bool,
         afterUpload: PropTypes.func,
         beforeClear: PropTypes.func,
         beforeRemove: PropTypes.func,
@@ -114,7 +154,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
         fileList: PropTypes.array, // files had been uploaded
         fileName: PropTypes.string, // same as name, to avoid props conflict in Form.Upload
         headers: PropTypes.oneOfType([PropTypes.object, PropTypes.func]),
-        hotSpotLocation: PropTypes.oneOf(['start','end']),
+        hotSpotLocation: PropTypes.oneOf(['start', 'end']),
         itemStyle: PropTypes.object,
         limit: PropTypes.number, // 最大允许上传文件个数
         listType: PropTypes.oneOf<UploadProps['listType']>(strings.LIST_TYPE),
@@ -136,12 +176,16 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
         onRetry: PropTypes.func,
         onSizeError: PropTypes.func, // Callback with invalid file size
         onSuccess: PropTypes.func,
+        onPastingError: PropTypes.func,
         previewFile: PropTypes.func, // Custom preview
         prompt: PropTypes.node,
         promptPosition: PropTypes.oneOf<UploadProps['promptPosition']>(strings.PROMPT_POSITION),
+        picWidth: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+        picHeight: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
         renderFileItem: PropTypes.func,
         renderPicPreviewIcon: PropTypes.func,
         renderFileOperation: PropTypes.func,
+        renderPicClose: PropTypes.func,
         renderPicInfo: PropTypes.func,
         renderThumbnail: PropTypes.func,
         showClear: PropTypes.bool,
@@ -179,6 +223,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
         onRetry: noop,
         onSizeError: noop,
         onSuccess: noop,
+        onPastingError: noop,
         promptPosition: 'right' as const,
         showClear: true,
         showPicInfo: false,
@@ -218,7 +263,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
         const { fileList } = props;
         if ('fileList' in props) {
             return {
-                fileList: fileList || []
+                fileList: fileList || [],
             };
         }
         return null;
@@ -228,7 +273,8 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
         return {
             ...super.adapter,
             notifyFileSelect: (files): void => this.props.onFileChange(files),
-            notifyError: (error, fileInstance, fileList, xhr): void => this.props.onError(error, fileInstance, fileList, xhr),
+            notifyError: (error, fileInstance, fileList, xhr): void =>
+                this.props.onError(error, fileInstance, fileList, xhr),
             notifySuccess: (responseBody, file, fileList): void => this.props.onSuccess(responseBody, file, fileList),
             notifyProgress: (percent, file, fileList): void => this.props.onProgress(percent, file, fileList),
             notifyRemove: (file, fileList, fileItem): void => this.props.onRemove(file, fileList, fileItem),
@@ -241,19 +287,38 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
                     this.setState({ fileList });
                 }
             },
-            notifyBeforeUpload: ({ file, fileList }): boolean | BeforeUploadObjectResult | Promise<BeforeUploadObjectResult> => this.props.beforeUpload({ file, fileList }),
-            notifyAfterUpload: ({ response, file, fileList }): AfterUploadResult => this.props.afterUpload({ response, file, fileList }),
+            notifyBeforeUpload: ({
+                file,
+                fileList,
+            }): boolean | BeforeUploadObjectResult | Promise<BeforeUploadObjectResult> =>
+                this.props.beforeUpload({ file, fileList }),
+            notifyAfterUpload: ({ response, file, fileList }): AfterUploadResult =>
+                this.props.afterUpload({ response, file, fileList }),
             resetInput: (): void => {
                 this.setState(prevState => ({
-                    inputKey: Math.random()
+                    inputKey: Math.random(),
                 }));
             },
             resetReplaceInput: (): void => {
                 this.setState(prevState => ({
-                    replaceInputKey: Math.random()
+                    replaceInputKey: Math.random(),
                 }));
             },
-            updateDragAreaStatus: (dragAreaStatus: string): void => this.setState({ dragAreaStatus } as { dragAreaStatus: 'default' | 'legal' | 'illegal' }),
+            isMac: (): boolean => {
+                return navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            },
+            registerPastingHandler: (cb?: (e: KeyboardEvent) => void): void => {
+                document.body.addEventListener('keydown', cb);
+                this.pastingCb = cb;
+            },
+            unRegisterPastingHandler: (): void => {
+                if (this.pastingCb) {
+                    document.body.removeEventListener('keydown', this.pastingCb);
+                }
+            },
+            notifyPastingError: (error): void => this.props.onPastingError(error),
+            updateDragAreaStatus: (dragAreaStatus: string): void =>
+                this.setState({ dragAreaStatus } as { dragAreaStatus: 'default' | 'legal' | 'illegal' }),
             notifyChange: ({ currentFile, fileList }): void => this.props.onChange({ currentFile, fileList }),
             updateLocalUrls: (urls): void => this.setState({ localUrls: urls }),
             notifyClear: (): void => this.props.onClear(),
@@ -268,6 +333,11 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
     foundation: UploadFoundation;
     inputRef: RefObject<HTMLInputElement> = null;
     replaceInputRef: RefObject<HTMLInputElement> = null;
+    pastingCb: null | ((params: any) => void);
+
+    componentDidMount(): void {
+        this.foundation.init();
+    }
 
     componentWillUnmount(): void {
         this.foundation.destroy();
@@ -295,7 +365,6 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
         this.setState({ replaceIdx: index }, () => {
             this.replaceInputRef.current.click();
         });
-
     };
 
     onReplaceChange = (e: ChangeEvent<HTMLInputElement>): void => {
@@ -316,24 +385,46 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
      * insert files at index
      * @param files Array<CustomFile>
      * @param index number
-     * @returns 
+     * @returns
      */
-    insert = (files: Array<CustomFile>, index: number): void => {
+    insert = (files: Array<CustomFile>, index?: number): void => {
         return this.foundation.insertFileToList(files, index);
-    }
+    };
 
     /**
      * ref method
      * manual upload by user
      */
     upload = (): void => {
-        const { fileList } = this.state;
-        this.foundation.startUpload(fileList);
+        this.foundation.manualUpload();
+    };
+
+    /**
+     * ref method
+     * manual open file select dialog
+     */
+    openFileDialog = (): void => {
+        this.onClick();
     };
 
     renderFile = (file: FileItem, index: number, locale: Locale['Upload']): ReactNode => {
         const { name, status, validateMessage, _sizeInvalid, uid } = file;
-        const { previewFile, listType, itemStyle, showPicInfo, renderPicInfo, renderPicPreviewIcon, renderFileOperation, renderFileItem, renderThumbnail, disabled, onPreviewClick } = this.props;
+        const {
+            previewFile,
+            listType,
+            itemStyle,
+            showPicInfo,
+            renderPicInfo,
+            renderPicClose,
+            renderPicPreviewIcon,
+            renderFileOperation,
+            renderFileItem,
+            renderThumbnail,
+            disabled,
+            onPreviewClick,
+            picWidth,
+            picHeight,
+        } = this.props;
         const onRemove = (): void => this.remove(file);
         const onRetry = (): void => {
             this.foundation.retry(file);
@@ -355,10 +446,16 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
             showPicInfo,
             renderPicInfo,
             renderPicPreviewIcon,
+            renderPicClose,
             renderFileOperation,
             renderThumbnail,
             onReplace,
-            onPreviewClick: typeof onPreviewClick !== 'undefined' ? (): void => this.foundation.handlePreviewClick(file) : undefined,
+            onPreviewClick:
+                typeof onPreviewClick !== 'undefined'
+                    ? (): void => this.foundation.handlePreviewClick(file)
+                    : undefined,
+            picWidth,
+            picHeight
         };
 
         if (status === strings.FILE_STATUS_UPLOAD_FAIL && !validateMessage) {
@@ -390,7 +487,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
     };
 
     renderFileListPic = () => {
-        const { showUploadList, limit, disabled, children, draggable, hotSpotLocation } = this.props;
+        const { showUploadList, limit, disabled, children, draggable, hotSpotLocation, picHeight, picWidth } = this.props;
         const { fileList: stateFileList, dragAreaStatus } = this.state;
         const fileList = this.props.fileList || stateFileList;
         const showAddTriggerInList = limit ? limit > fileList.length : true;
@@ -404,16 +501,20 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
         });
         const dragAreaCls = cls({
             [`${dragAreaBaseCls}-legal`]: dragAreaStatus === strings.DRAG_AREA_LEGAL,
-            [`${dragAreaBaseCls}-illegal`]: dragAreaStatus === strings.DRAG_AREA_ILLEGAL
+            [`${dragAreaBaseCls}-illegal`]: dragAreaStatus === strings.DRAG_AREA_ILLEGAL,
         });
         const mainCls = `${prefixCls}-file-list-main`;
         const addContentProps = {
             role: 'button',
             className: uploadAddCls,
             onClick: this.onClick,
+            style: {
+                height: picHeight,
+                width: picWidth
+            }
         };
         const containerProps = {
-            className: fileListCls
+            className: fileListCls,
         };
         const draggableProps = {
             onDrop: this.onDrop,
@@ -425,7 +526,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
             Object.assign(addContentProps, draggableProps, { className: cls(uploadAddCls, dragAreaCls) });
         }
         const addContent = (
-            <div {...addContentProps}>
+            <div {...addContentProps} x-semi-prop="children">
                 {children}
             </div>
         );
@@ -450,7 +551,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
                 )}
             </LocaleConsumer>
         );
-    }
+    };
 
     renderFileListDefault = () => {
         const { showUploadList, limit, disabled } = this.props;
@@ -462,7 +563,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
         const showTitle = limit !== 1 && fileList.length;
         const showClear = this.props.showClear && !disabled;
         const containerProps = {
-            className: fileListCls
+            className: fileListCls,
         };
 
         if (!showUploadList || !fileList.length) {
@@ -477,7 +578,12 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
                             <div className={titleCls}>
                                 <span className={`${titleCls}-choosen`}>{locale.selectedFiles}</span>
                                 {showClear ? (
-                                    <span role="button" tabIndex={0} onClick={this.clear} className={`${titleCls}-clear`}>
+                                    <span
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={this.clear}
+                                        className={`${titleCls}-clear`}
+                                    >
                                         {locale.clear}
                                     </span>
                                 ) : null}
@@ -491,7 +597,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
                 )}
             </LocaleConsumer>
         );
-    }
+    };
 
     onDrop = (e: DragEvent<HTMLDivElement>): void => {
         this.foundation.handleDrop(e);
@@ -524,7 +630,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
                 {children}
             </div>
         );
-    }
+    };
 
     renderDragArea = (): ReactNode => {
         const { dragAreaStatus } = this.state;
@@ -554,14 +660,16 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
                             children
                         ) : (
                             <>
-                                <div className={`${dragAreaBaseCls}-icon`}>
+                                <div className={`${dragAreaBaseCls}-icon`} x-semi-prop="dragIcon">
                                     {dragIcon || <IconUpload size="extra-large" />}
                                 </div>
                                 <div className={`${dragAreaBaseCls}-text`}>
-                                    <div className={`${dragAreaBaseCls}-main-text`}>
+                                    <div className={`${dragAreaBaseCls}-main-text`} x-semi-prop="dragMainText">
                                         {dragMainText || locale.mainText}
                                     </div>
-                                    <div className={`${dragAreaBaseCls}-sub-text`}>{dragSubText}</div>
+                                    <div className={`${dragAreaBaseCls}-sub-text`} x-semi-prop="dragSubText">
+                                        {dragSubText}
+                                    </div>
                                     <div className={`${dragAreaBaseCls}-tips`}>
                                         {dragAreaStatus === strings.DRAG_AREA_LEGAL && (
                                             <span className={`${dragAreaBaseCls}-tips-legal`}>{locale.legalTips}</span>
@@ -597,15 +705,20 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
             validateMessage,
             validateStatus,
             directory,
+            ...rest
         } = this.props;
-        const uploadCls = cls(prefixCls, {
-            [`${prefixCls}-picture`]: listType === strings.FILE_LIST_PIC,
-            [`${prefixCls}-disabled`]: disabled,
-            [`${prefixCls}-default`]: validateStatus === 'default',
-            [`${prefixCls}-error`]: validateStatus === 'error',
-            [`${prefixCls}-warning`]: validateStatus === 'warning',
-            [`${prefixCls}-success`]: validateStatus === 'success',
-        }, className);
+        const uploadCls = cls(
+            prefixCls,
+            {
+                [`${prefixCls}-picture`]: listType === strings.FILE_LIST_PIC,
+                [`${prefixCls}-disabled`]: disabled,
+                [`${prefixCls}-default`]: validateStatus === 'default',
+                [`${prefixCls}-error`]: validateStatus === 'error',
+                [`${prefixCls}-warning`]: validateStatus === 'warning',
+                [`${prefixCls}-success`]: validateStatus === 'success',
+            },
+            className
+        );
         const inputCls = cls(`${prefixCls}-hidden-input`);
         const inputReplaceCls = cls(`${prefixCls}-hidden-input-replace`);
         const promptCls = cls(`${prefixCls}-prompt`);
@@ -614,7 +727,7 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
         const dirProps = directory ? { directory: 'directory', webkitdirectory: 'webkitdirectory' } : {};
 
         return (
-            <div className={uploadCls} style={style} x-prompt-pos={promptPosition}>
+            <div className={uploadCls} style={style} x-prompt-pos={promptPosition} {...this.getDataAttr(rest)}>
                 <input
                     key={this.state.inputKey}
                     capture={capture}
@@ -640,13 +753,20 @@ class Upload extends BaseComponent<UploadProps, UploadState> {
                     ref={this.replaceInputRef}
                 />
                 {this.renderAddContent()}
-                {prompt ? <div className={promptCls}>{prompt}</div> : null}
+                {prompt ? (
+                    <div className={promptCls} x-semi-prop="prompt">
+                        {prompt}
+                    </div>
+                ) : null}
 
-                {validateMessage ? <div className={validateMsgCls}>{validateMessage}</div> : null}
+                {validateMessage ? (
+                    <div className={validateMsgCls} x-semi-prop="validateMessage">
+                        {validateMessage}
+                    </div>
+                ) : null}
                 {this.renderFileList()}
             </div>
         );
     }
 }
-
 export default Upload;

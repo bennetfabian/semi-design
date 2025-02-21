@@ -3,7 +3,7 @@ import cls from 'classnames';
 import PropTypes from 'prop-types';
 import { cssClasses, strings } from '@douyinfe/semi-foundation/layout/constants';
 import getDataAttr from '@douyinfe/semi-foundation/utils/getDataAttr';
-import LayoutContext from './layout-context';
+import LayoutContext, { ContextType } from './layout-context';
 import { registerMediaQuery } from '../_utils';
 
 const responsiveMap: ResponsiveMap = {
@@ -21,7 +21,7 @@ export interface ResponsiveMap {
     md: string;
     lg: string;
     xl: string;
-    xxl: string;
+    xxl: string
 }
 
 const generateId = ((): () => string => {
@@ -38,10 +38,11 @@ export interface SiderProps {
     prefixCls?: string;
     style?: CSSProperties;
     className?: string;
+    children?: React.ReactNode;
     breakpoint?: Array<keyof ResponsiveMap>;
     onBreakpoint?: (screen: keyof ResponsiveMap, match: boolean) => void;
     'aria-label'?: React.AriaAttributes['aria-label'];
-    'role'?:React.AriaRole
+    'role'?: React.AriaRole
 }
 
 class Sider extends React.PureComponent<SiderProps> {
@@ -60,8 +61,10 @@ class Sider extends React.PureComponent<SiderProps> {
     };
 
     static contextType = LayoutContext;
+    static elementType = "Layout.Sider"
 
     unRegisters: Array<() => void> = [];
+    context: ContextType;
     uniqueId = '';
 
     constructor(props: SiderProps) {

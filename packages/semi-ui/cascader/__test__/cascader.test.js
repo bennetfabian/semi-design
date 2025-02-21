@@ -427,10 +427,10 @@ describe('Cascader', () => {
         });
         expect(
             cascaderWithSingleFilter
-            .find(`.${BASE_CLASS_PREFIX}-cascader-search-wrapper .${BASE_CLASS_PREFIX}-input`)
+            .find(`.${BASE_CLASS_PREFIX}-cascader-search-wrapper span`)
             .getDOMNode()
-            .getAttribute('value')
-        ).toEqual('亚洲 / 中国');
+            .textContent
+            ).toEqual('亚洲 / 中国');
         cascaderWithSingleFilter.unmount();
 
         const cascaderWithSingleControlled = render({
@@ -550,10 +550,10 @@ describe('Cascader', () => {
         expect(searchWrapper.exists()).toEqual(true);
         expect(
             searchWrapper
-                .find('input')
-                .instance()
-                .getAttribute('placeholder')
-        ).toEqual('placeholder');
+                .find('span')
+                .getDOMNode()
+                .textContent
+            ).toEqual('placeholder');
     });
 
     it('onSearch', () => {
@@ -563,10 +563,11 @@ describe('Cascader', () => {
             filterTreeNode: true,
             onSearch: spyOnSearch,
         });
-        const searchWrapper = cascader.find(`.${BASE_CLASS_PREFIX}-cascader-search-wrapper`);
         let searchValue = '${BASE_CLASS_PREFIX}';
         let event = { target: { value: searchValue } };
-        searchWrapper.find('input').simulate('change', event);
+        cascader.simulate('click');
+        const input = cascader.find(`.${BASE_CLASS_PREFIX}-cascader-selection input`);
+        input.simulate('change', event);
         expect(spyOnSearch.calledOnce).toBe(true);
         expect(spyOnSearch.calledWithMatch(searchValue)).toBe(true);
     });
@@ -1228,8 +1229,10 @@ describe('Cascader', () => {
             separator: ' > ',
             defaultOpen: true,
         });
+        const span = cascader.find(`.${BASE_CLASS_PREFIX}-cascader-selection span`);
+        expect(span.getDOMNode().textContent).toEqual('亚洲 > 中国 > 北京'); 
+        cascader.simulate('click');
         const input = cascader.find(`.${BASE_CLASS_PREFIX}-cascader-selection input`);
-        expect(input.props().placeholder).toEqual('亚洲 > 中国 > 北京'); 
         const event = { target: { value: '中国' } };
         input.simulate('change', event);
         expect(
@@ -1239,6 +1242,23 @@ describe('Cascader', () => {
             .getDOMNode()
             .textContent
         ).toEqual('亚洲 > 中国 > 北京');
+        cascader.unmount();
+    });
+
+    it('search ref method', () => {
+        let r;
+        const cascader = render({
+            ref: (ref) => { r = ref },
+            filterTreeNode: true,
+            searchPosition: 'custom',
+            defaultOpen: true,
+        });
+        r.search('北京');
+        expect(cascader.state().inputValue).toEqual('北京');
+        expect(
+            document.querySelectorAll(`.${BASE_CLASS_PREFIX}-cascader-option-label-highlight`)[0]
+            .textContent
+        ).toEqual('北京');
         cascader.unmount();
     });
 
@@ -1350,4 +1370,47 @@ describe('Cascader', () => {
         ).toEqual('亚洲');
         cascader4.unmount();
     });
+
+    it('ref method', () => {
+        let r;
+        let props = {
+            ref: (ref) => { r = ref },
+            filter: true,
+            multiple: true,
+        };
+
+        let select = render(props);
+        r.open();
+        expect(select.state().isOpen).toEqual(true);
+
+        r.close();
+        expect(select.state().isOpen).toEqual(false);
+    });
+
+    it('autoMerge false & value []', () => {
+        const cascader = render({
+            multiple: true,
+            autoMergeValue: false,
+            value: [],
+            placeholder: "autoMergeValue 为 false"
+        });
+
+        const placeholder = cascader.find(`.${BASE_CLASS_PREFIX}-cascader-selection-placeholder`)
+        expect(placeholder.getDOMNode().textContent).toEqual('autoMergeValue 为 false');
+        cascader.unmount();
+    })
+
+    it('value not in TreeData', () => {
+        const cascader = render({
+            multiple: true,
+            value: [ "value", "notIn",  "treeData"],
+            placeholder: "value not in treeData, show placeholder",
+            autoMergeValue: false,
+            filterTreeNode: true,
+        });
+
+        const placeholder = cascader.find(`.${BASE_CLASS_PREFIX}-input`)
+        expect(placeholder.getDOMNode().placeholder).toEqual('value not in treeData, show placeholder');
+        cascader.unmount();
+    })
 });

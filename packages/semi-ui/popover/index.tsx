@@ -1,29 +1,32 @@
 import React from 'react';
 import classNames from 'classnames';
 import PropTypes from 'prop-types';
-import ConfigContext from '../configProvider/context';
+import ConfigContext, { ContextValue } from '../configProvider/context';
 import { cssClasses, strings, numbers } from '@douyinfe/semi-foundation/popover/constants';
-import Tooltip, { ArrowBounding, Position, Trigger } from '../tooltip/index';
+import Tooltip, { ArrowBounding, Position, TooltipProps, Trigger, RenderContentProps } from '../tooltip/index';
 import Arrow from './Arrow';
 import '@douyinfe/semi-foundation/popover/popover.scss';
 import { BaseProps } from '../_base/baseComponent';
-import { Motion } from '../_base/base';
-import { noop } from 'lodash';
+import { isFunction, noop } from 'lodash';
 
-export { ArrowProps } from './Arrow';
+import type { ArrowProps } from './Arrow';
+import isNullOrUndefined from '@douyinfe/semi-foundation/utils/isNullOrUndefined';
+import { getDefaultPropsFromGlobalConfig } from "../_utils";
+export type { ArrowProps };
 declare interface ArrowStyle {
     borderColor?: string;
     backgroundColor?: string;
-    borderOpacity?: string | number;
+    borderOpacity?: string | number
 }
 
 export interface PopoverProps extends BaseProps {
-    children?: React.ReactNode;
-    content?: React.ReactNode;
-    visible?: boolean;
     autoAdjustOverflow?: boolean;
-    motion?: Motion;
+    children?: React.ReactNode;
+    content?: TooltipProps['content'];
+    visible?: boolean;
     position?: Position;
+    motion?: boolean;
+    margin?: TooltipProps['margin'];
     mouseEnterDelay?: number;
     mouseLeaveDelay?: number;
     trigger?: Trigger;
@@ -31,7 +34,7 @@ export interface PopoverProps extends BaseProps {
     onVisibleChange?: (visible: boolean) => void;
     onClickOutSide?: (e: React.MouseEvent) => void;
     showArrow?: boolean;
-    spacing?: number;
+    spacing?: number | { x: number; y: number };
     stopPropagation?: boolean | string;
     arrowStyle?: ArrowStyle;
     arrowBounding?: ArrowBounding;
@@ -40,10 +43,18 @@ export interface PopoverProps extends BaseProps {
     rePosKey?: string | number;
     getPopupContainer?: () => HTMLElement;
     zIndex?: number;
+    closeOnEsc?: TooltipProps['closeOnEsc'];
+    guardFocus?: TooltipProps['guardFocus'];
+    returnFocusOnClose?: TooltipProps['returnFocusOnClose'];
+    onEscKeyDown?: TooltipProps['onEscKeyDown'];
+    clickToHide?: TooltipProps['clickToHide'];
+    disableFocusListener?: boolean;
+    afterClose?: () => void;
+    keepDOM?: boolean
 }
 
 export interface PopoverState {
-    popConfirmVisible: boolean;
+    popConfirmVisible: boolean
 }
 const positionSet = strings.POSITION_SET;
 const triggerSet = strings.TRIGGER_SET;
@@ -52,12 +63,13 @@ class Popover extends React.PureComponent<PopoverProps, PopoverState> {
     static contextType = ConfigContext;
     static propTypes = {
         children: PropTypes.node,
-        content: PropTypes.node,
+        content: PropTypes.oneOfType([PropTypes.node, PropTypes.func]),
         visible: PropTypes.bool,
         autoAdjustOverflow: PropTypes.bool,
-        motion: PropTypes.oneOfType([PropTypes.bool, PropTypes.object, PropTypes.func]),
+        motion: PropTypes.bool,
         position: PropTypes.oneOf(positionSet),
         // getPopupContainer: PropTypes.func,
+        margin: PropTypes.oneOfType([PropTypes.number, PropTypes.object]),
         mouseEnterDelay: PropTypes.number,
         mouseLeaveDelay: PropTypes.number,
         trigger: PropTypes.oneOf(triggerSet).isRequired,
@@ -65,7 +77,7 @@ class Popover extends React.PureComponent<PopoverProps, PopoverState> {
         onVisibleChange: PropTypes.func,
         onClickOutSide: PropTypes.func,
         style: PropTypes.object,
-        spacing: PropTypes.number,
+        spacing: PropTypes.oneOfType([PropTypes.number, PropTypes.object]),
         zIndex: PropTypes.number,
         showArrow: PropTypes.bool,
         arrowStyle: PropTypes.shape({
@@ -76,9 +88,12 @@ class Popover extends React.PureComponent<PopoverProps, PopoverState> {
         arrowPointAtCenter: PropTypes.bool,
         arrowBounding: PropTypes.object,
         prefixCls: PropTypes.string,
+        guardFocus: PropTypes.bool,
+        disableArrowKeyDown: PropTypes.bool,
     };
+    static __SemiComponentName__ = "Popover";
 
-    static defaultProps = {
+    static defaultProps = getDefaultPropsFromGlobalConfig(Popover.__SemiComponentName__, {
         arrowBounding: numbers.ARROW_BOUNDING,
         showArrow: false,
         autoAdjustOverflow: true,
@@ -90,9 +105,28 @@ class Popover extends React.PureComponent<PopoverProps, PopoverState> {
         position: 'bottom',
         prefixCls: cssClasses.PREFIX,
         onClickOutSide: noop,
-    };
+        onEscKeyDown: noop,
+        closeOnEsc: true,
+        returnFocusOnClose: true,
+        guardFocus: true,
+        disableFocusListener: true
+    })
 
-    renderPopCard() {
+    context: ContextValue;
+    tooltipRef: React.RefObject<Tooltip | null>;
+    constructor(props: PopoverProps) {
+        super(props);
+        this.tooltipRef = React.createRef();
+    }
+
+    /**
+     * focus on tooltip trigger
+     */
+    public focusTrigger = () => {
+        this.tooltipRef.current?.focusTrigger();
+    }
+
+    renderPopCard = ({ initialFocusRef }: { initialFocusRef: RenderContentProps['initialFocusRef'] }) => {
         const { content, contentClassName, prefixCls } = this.props;
         const { direction } = this.context;
         const popCardCls = classNames(
@@ -102,12 +136,19 @@ class Popover extends React.PureComponent<PopoverProps, PopoverState> {
                 [`${prefixCls}-rtl`]: direction === 'rtl',
             }
         );
+        const contentNode = this.renderContentNode({ initialFocusRef, content });
         return (
             <div className={popCardCls}>
-                <div className={`${prefixCls}-content`}>{content}</div>
+                <div className={`${prefixCls}-content`}>{contentNode}</div>
             </div>
         );
     }
+
+    renderContentNode = (props: { content: TooltipProps['content']; initialFocusRef: RenderContentProps['initialFocusRef'] }) => {
+        const { initialFocusRef, content } = props;
+        const contentProps = { initialFocusRef };
+        return !isFunction(content) ? content : content(contentProps);
+    };
 
     render() {
         const {
@@ -122,7 +163,6 @@ class Popover extends React.PureComponent<PopoverProps, PopoverState> {
             ...attr
         } = this.props;
         let { spacing } = this.props;
-        const popContent = this.renderPopCard();
 
         const arrowProps = {
             position,
@@ -133,7 +173,7 @@ class Popover extends React.PureComponent<PopoverProps, PopoverState> {
 
         const arrow = showArrow ? <Arrow {...arrowProps} /> : false;
 
-        if (typeof spacing !== 'number') {
+        if (isNullOrUndefined(spacing)) {
             spacing = showArrow ? numbers.SPACING_WITH_ARROW : numbers.SPACING;
         }
 
@@ -141,11 +181,13 @@ class Popover extends React.PureComponent<PopoverProps, PopoverState> {
 
         return (
             <Tooltip
+                guardFocus
+                ref={this.tooltipRef}
                 {...(attr as any)}
                 trigger={trigger}
                 position={position}
                 style={style}
-                content={popContent}
+                content={this.renderPopCard}
                 prefixCls={prefixCls}
                 spacing={spacing}
                 showArrow={arrow}
@@ -157,5 +199,4 @@ class Popover extends React.PureComponent<PopoverProps, PopoverState> {
         );
     }
 }
-
 export default Popover;

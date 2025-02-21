@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { Component } from 'react';
 import { Button, Row, Col, InputGroup as BasicInputGroup, AutoComplete } from '../../index';
-import { Form, useFormState, ArrayField, Label, withField } from '../index';
+import { Form, useFormState, ArrayField, withField } from '../index';
 import BasicSelect from '../../select/index';
 import BasicInput from '../../input/index';
 import BasicInputNumber from '../../inputNumber/index';
@@ -283,6 +283,15 @@ class BasicDemoWithInit extends Component {
                             </Form.AutoComplete>
                         </Col>
                     </Row>
+                    <Row>
+                        <Col span={12}>
+                            <Form.TagInput
+                                field='tags'
+                                label='tags'
+                            />
+                        </Col>
+                        
+                    </Row>
                 </Form.Section>
                 <Form.Section text='资源详情'>
 
@@ -342,10 +351,10 @@ class BasicDemoWithInit extends Component {
                     </Col>
                 </Row>
                 <Form.CheckboxGroup field="cardCheckbox" label='卡片选择' style={{ width: '90%' }} type='card' initValue={['1', '3']} direction={'horizontal'} aria-label="CheckboxGroup 示例">
-                    <Form.Checkbox value={'1'} disabled extra='Semi Design 是由互娱社区前端团队与 UED 团队共同设计开发并维护的设计系统' style={{width:280}}>
+                    <Form.Checkbox value={'1'} disabled extra='Semi Design 是由抖音前端团队与 UED 团队共同设计开发并维护的设计系统' style={{width:280}}>
                         单选框标题
                     </Form.Checkbox>
-                    <Form.Checkbox value={'2'} disabled extra='Semi Design 是由互娱社区前端团队与 UED 团队共同设计开发并维护的设计系统' style={{width:280}}>
+                    <Form.Checkbox value={'2'} disabled extra='Semi Design 是由抖音前端团队与 UED 团队共同设计开发并维护的设计系统' style={{width:280}}>
                         单选框标题
                     </Form.Checkbox>
                 </Form.CheckboxGroup>

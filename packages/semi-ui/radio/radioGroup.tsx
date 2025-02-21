@@ -18,7 +18,7 @@ export interface OptionItem {
     disabled?: boolean;
     extra?: React.ReactNode;
     style?: React.CSSProperties;
-    className?: string;
+    className?: string
 }
 export type Options = string[] | Array<OptionItem>;
 
@@ -30,6 +30,7 @@ export type RadioGroupProps = {
     value?: string | number;
     onChange?: (event: RadioChangeEvent) => void;
     className?: string;
+    children?: React.ReactNode;
     style?: React.CSSProperties;
     direction?: ArrayElement<typeof strings.DIRECTION_SET>;
     mode?: RadioMode;
@@ -42,11 +43,11 @@ export type RadioGroupProps = {
     'aria-invalid'?: React.AriaAttributes['aria-invalid'];
     'aria-labelledby'?: React.AriaAttributes['aria-labelledby'];
     'aria-required'?: React.AriaAttributes['aria-required'];
-    id?: string;
+    id?: string
 };
 
 export interface RadioGroupState {
-    value?: any;
+    value?: any
 }
 
 class RadioGroup extends BaseComponent<RadioGroupProps, RadioGroupState> {
@@ -87,7 +88,7 @@ class RadioGroup extends BaseComponent<RadioGroupProps, RadioGroupState> {
     constructor(props: RadioGroupProps) {
         super(props);
         this.state = {
-            value: undefined,
+            value: props.value || props.defaultValue,
         };
         this.foundation = new RadioGroupFoundation(this.adapter);
     }
@@ -147,6 +148,7 @@ class RadioGroup extends BaseComponent<RadioGroupProps, RadioGroupState> {
             type,
             buttonSize,
             id,
+            ...rest
         } = this.props;
 
         const isButtonRadio = type === strings.TYPE_BUTTON;
@@ -212,6 +214,7 @@ class RadioGroup extends BaseComponent<RadioGroupProps, RadioGroupState> {
                 aria-labelledby={this.props['aria-labelledby']}
                 aria-describedby={this.props['aria-describedby']}
                 aria-required={this.props['aria-required']}
+                {...this.getDataAttr(rest)}
             >
                 <Context.Provider
                     value={{

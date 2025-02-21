@@ -1,8 +1,7 @@
-/* eslint-disable no-unreachable */
 import React from 'react';
 import cls from 'classnames';
 import PropTypes from 'prop-types';
-import ConfigContext from '../configProvider/context';
+import ConfigContext, { ContextValue } from '../configProvider/context';
 import { cssClasses, numbers, strings } from '@douyinfe/semi-foundation/notification/constants';
 import NotificationFoundation, {
     NoticeAdapter,
@@ -11,7 +10,7 @@ import NotificationFoundation, {
 } from '@douyinfe/semi-foundation/notification/notificationFoundation';
 import Button from '../iconButton';
 import BaseComponent from '../_base/baseComponent';
-import { isSemiIcon } from '../_utils';
+import { getDefaultPropsFromGlobalConfig, isSemiIcon } from '../_utils';
 import { noop } from 'lodash';
 import { IconAlertCircle, IconAlertTriangle, IconClose, IconInfoCircle, IconTickCircle } from '@douyinfe/semi-icons';
 import { getUuidShort } from '@douyinfe/semi-foundation/utils/uuid';
@@ -22,6 +21,8 @@ export interface NoticeReactProps extends NoticeProps {
     content?: React.ReactNode;
     icon?: React.ReactNode;
     onClick?: (e: React.MouseEvent) => void;
+    onAnimationEnd?: (e: React.AnimationEvent) => void;
+    onAnimationStart?: (e: React.AnimationEvent) => void
 }
 
 const prefixCls = cssClasses.NOTICE;
@@ -32,7 +33,7 @@ class Notice extends BaseComponent<NoticeReactProps, NoticeState> {
     static contextType = ConfigContext;
     static propTypes = {
         duration: PropTypes.number,
-        id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+        id: PropTypes.string,
         title: PropTypes.node,
         content: PropTypes.node, // strings、numbers、array、element
         type: PropTypes.oneOf(types),
@@ -47,7 +48,9 @@ class Notice extends BaseComponent<NoticeReactProps, NoticeState> {
         direction: PropTypes.oneOf(directions),
     };
 
-    static defaultProps = {
+    static __SemiComponentName__ = "Notification";
+
+    static defaultProps = getDefaultPropsFromGlobalConfig(Notice.__SemiComponentName__, {
         duration,
         id: '',
         close: noop,
@@ -58,7 +61,7 @@ class Notice extends BaseComponent<NoticeReactProps, NoticeState> {
         title: '',
         showClose: true,
         theme: 'normal',
-    };
+    });
 
     get adapter(): NoticeAdapter {
         return {
@@ -82,6 +85,8 @@ class Notice extends BaseComponent<NoticeReactProps, NoticeState> {
         this.foundation = new NotificationFoundation(this.adapter);
     }
 
+    context: ContextValue;
+
     componentWillUnmount() {
         this.foundation.destroy();
     }
@@ -104,7 +109,7 @@ class Notice extends BaseComponent<NoticeReactProps, NoticeState> {
         }
         if (iconType) {
             return (
-                <div className={iconCls}>
+                <div className={iconCls} x-semi-prop="icon">
                     {isSemiIcon(iconType) ? React.cloneElement(iconType, { size: iconType.props.size || 'large' }) : iconType}
                 </div>
             );
@@ -155,7 +160,6 @@ class Notice extends BaseComponent<NoticeReactProps, NoticeState> {
         });
         const titleID = getUuidShort({});
         return (
-            // eslint-disable-next-line jsx-a11y/no-static-element-interactions
             <div
                 className={wrapper}
                 style={style}
@@ -164,18 +168,32 @@ class Notice extends BaseComponent<NoticeReactProps, NoticeState> {
                 onClick={this.notifyClick}
                 aria-labelledby={titleID}
                 role={'alert'}
+                onAnimationEnd={this.props.onAnimationEnd}
+                onAnimationStart={this.props.onAnimationStart}
             >
                 <div>{this.renderTypeIcon()}</div>
                 <div className={`${prefixCls}-inner`}>
                     <div className={`${prefixCls}-content-wrapper`}>
-                        {title ? <div id={titleID} className={`${prefixCls}-title`}>{title}</div> : ''}
-                        {content ? <div className={`${prefixCls}-content`}>{content}</div> : ''}
+                        {title ? (
+                            <div id={titleID} className={`${prefixCls}-title`} x-semi-prop="title">
+                                {title}
+                            </div>
+                        ) : (
+                            ''
+                        )}
+                        {content ? (
+                            <div className={`${prefixCls}-content`} x-semi-prop="content">
+                                {content}
+                            </div>
+                        ) : (
+                            ''
+                        )}
                     </div>
                     {showClose && (
                         <Button
                             className={`${prefixCls}-icon-close`}
                             type="tertiary"
-                            icon={<IconClose/>}
+                            icon={<IconClose />}
                             theme="borderless"
                             size="small"
                             onClick={this.close}
