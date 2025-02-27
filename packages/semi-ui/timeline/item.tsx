@@ -3,10 +3,12 @@ import cls from 'classnames';
 import { noop } from 'lodash';
 import PropTypes from 'prop-types';
 import { cssClasses, strings } from '@douyinfe/semi-foundation/timeline/constants';
+import getDataAttr from '@douyinfe/semi-foundation/utils/getDataAttr';
 import '@douyinfe/semi-foundation/timeline/timeline.scss';
 
 export interface TimelineItemProps {
     color?: string;
+    children?: React.ReactNode;
     time?: React.ReactNode;
     type?: 'default' | 'ongoing' | 'success' | 'warning' | 'error';
     dot?: React.ReactNode;
@@ -14,7 +16,7 @@ export interface TimelineItemProps {
     position?: 'left' | 'right';
     className?: string;
     style?: React.CSSProperties;
-    onClick?: React.MouseEventHandler<HTMLLIElement>;
+    onClick?: React.MouseEventHandler<HTMLLIElement>
 }
 
 const prefixCls = cssClasses.ITEM;
@@ -49,6 +51,7 @@ export default class Item extends PureComponent<TimelineItemProps> {
             time,
             extra,
             onClick,
+            ...rest
         } = this.props;
 
         const itemCls = cls(prefixCls,
@@ -62,7 +65,7 @@ export default class Item extends PureComponent<TimelineItemProps> {
         });
         const dotStyle = color ? { style: { backgroundColor: color } } : null;
         return (
-            <li className={itemCls} style={style} onClick={onClick}>
+            <li className={itemCls} style={style} onClick={onClick} {...getDataAttr(rest)}>
                 <div className={`${prefixCls}-tail`} aria-hidden />
                 <div
                     className={dotCls}

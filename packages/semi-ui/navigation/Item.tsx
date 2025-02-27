@@ -1,5 +1,3 @@
-/* eslint-disable max-len */
-/* eslint-disable no-nested-ternary */
 import BaseComponent, { BaseProps } from '../_base/baseComponent';
 import React from 'react';
 import PropTypes from 'prop-types';
@@ -11,41 +9,44 @@ import { cloneDeep, isSemiIcon } from '../_utils';
 import ItemFoundation, {
     ItemAdapter,
     ItemProps,
+    ItemKey,
     SelectedItemProps
 } from '@douyinfe/semi-foundation/navigation/itemFoundation';
 import { cssClasses, strings } from '@douyinfe/semi-foundation/navigation/constants';
 
 import Tooltip from '../tooltip';
-import NavContext from './nav-context';
+import NavContext, { NavContextType } from './nav-context';
 import Dropdown from '../dropdown';
 
 const clsPrefix = `${cssClasses.PREFIX}-item`;
-
-export interface NavItemProps extends ItemProps, BaseProps {
-    children?: React.ReactNode;
+interface NavItemProps extends ItemProps, Omit<BaseProps, 'children'> {
     disabled?: boolean;
     forwardRef?: (ele: HTMLLIElement) => void;
     icon?: React.ReactNode;
-    itemKey?: React.ReactText;
+    itemKey?: ItemKey;
     level?: number;
     link?: string;
-    linkOptions?: React.HTMLAttributes<HTMLLinkElement>;
+    linkOptions?: React.AnchorHTMLAttributes<HTMLAnchorElement>;
+    tabIndex?: number; // on the site we change the tabindex to -1 in order to use gatsby's navigate link
     text?: React.ReactNode;
     tooltipHideDelay?: number;
     tooltipShowDelay?: number;
+
     onClick?(clickItems: SelectedData): void;
+
     onMouseEnter?: React.MouseEventHandler<HTMLLIElement>;
-    onMouseLeave?: React.MouseEventHandler<HTMLLIElement>;
+    onMouseLeave?: React.MouseEventHandler<HTMLLIElement>
 }
 
-export interface SelectedData extends SelectedItemProps<NavItemProps> {
-    text?: React.ReactNode;
+interface SelectedData extends SelectedItemProps<NavItemProps> {
+    text?: React.ReactNode
 }
 
-export interface NavItemState {
-    tooltipShow: boolean;
+interface NavItemState {
+    tooltipShow: boolean
 }
 
+export type { NavItemProps, ItemKey, NavItemState, SelectedData };
 export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
     static contextType = NavContext;
 
@@ -55,7 +56,6 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
         onClick: PropTypes.func,
         onMouseEnter: PropTypes.func,
         onMouseLeave: PropTypes.func,
-        children: PropTypes.node,
         icon: PropTypes.oneOfType([PropTypes.node]),
         className: PropTypes.string,
         toggleIcon: PropTypes.string,
@@ -67,6 +67,7 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
         link: PropTypes.string,
         linkOptions: PropTypes.object,
         disabled: PropTypes.bool,
+        tabIndex: PropTypes.number
     };
 
     static defaultProps = {
@@ -78,9 +79,12 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
         onMouseEnter: noop,
         onMouseLeave: noop,
         disabled: false,
+        tabIndex: 0
     };
 
     foundation: ItemFoundation;
+    context: NavContextType;
+
     constructor(props: NavItemProps) {
         super(props);
         this.state = {
@@ -112,9 +116,9 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
             notifyMouseLeave: (...args) => this.props.onMouseLeave(...args),
             getIsCollapsed: () => this.props.isCollapsed || Boolean(this.context && this.context.isCollapsed) || false,
             getSelected: () =>
-                Boolean(this.context && this.context.selectedKeys && this.context.selectedKeys.includes(this.props.itemKey)),
+                Boolean(this.context && this.context.selectedKeys && this.context.selectedKeys.includes(this.props.itemKey as string)),
             getIsOpen: () =>
-                Boolean(this.context && this.context.openKeys && this.context.openKeys.includes(this.props.itemKey)),
+                Boolean(this.context && this.context.openKeys && this.context.openKeys.includes(this.props.itemKey as string)),
         };
     }
 
@@ -151,14 +155,17 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
 
     wrapTooltip = (node: React.ReactNode) => {
         const { text, tooltipHideDelay, tooltipShowDelay } = this.props;
+        const hideDelay = tooltipHideDelay ?? this.context.tooltipHideDelay;
+        const showDelay = tooltipShowDelay ?? this.context.tooltipShowDelay;
 
         return (
             <Tooltip
                 content={text}
+                wrapWhenSpecial={false}
                 position="right"
                 trigger={'hover'}
-                mouseEnterDelay={tooltipShowDelay}
-                mouseLeaveDelay={tooltipHideDelay}
+                mouseEnterDelay={showDelay}
+                mouseLeaveDelay={hideDelay}
             >
                 {node}
             </Tooltip>
@@ -171,7 +178,6 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
     render() {
         const {
             text,
-            children,
             icon,
             toggleIcon,
             className,
@@ -184,6 +190,7 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
             linkOptions,
             disabled,
             level = 0,
+            tabIndex
         } = this.props;
 
         const { mode, isInSubNav, prefixCls, limitIndent } = this.context;
@@ -194,6 +201,11 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
 
 
         let itemChildren = null;
+        // Children is not a recommended usage and may cause some bug-like performance, but some users have already used it, so here we only delete the ts definition instead of deleting the actual code
+        // children 并不是我们推荐的用法，可能会导致一些像 bug的表现，但是有些用户已经用了，所以此处仅作删除 ts 定义而非删除实际代码的操作
+        // refer https://github.com/DouyinFE/semi-design/issues/2710
+        // @ts-ignore
+        const children = this.props?.children;
         if (!isNullOrUndefined(children)) {
             itemChildren = children;
         } else {
@@ -216,7 +228,7 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
 
         if (typeof link === 'string') {
             itemChildren = (
-                <a className={`${prefixCls}-item-link`} href={link} {...(linkOptions as any)}>
+                <a className={`${prefixCls}-item-link`} href={link} tabIndex={-1} {...(linkOptions as any)}>
                     {itemChildren}
                 </a>
             );
@@ -243,6 +255,7 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
                     onMouseEnter={onMouseEnter}
                     onMouseLeave={onMouseLeave}
                     disabled={disabled}
+                    onKeyDown={this.handleKeyPress}
                 >
                     {itemChildren}
                 </Dropdown.Item>
@@ -255,6 +268,7 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
                 [`${clsPrefix}-selected`]: selected && !isSubNav,
                 [`${clsPrefix}-collapsed`]: isCollapsed,
                 [`${clsPrefix}-disabled`]: disabled,
+                [`${clsPrefix}-has-link`]: typeof link === 'string',
             });
             const ariaProps = {
                 'aria-disabled': disabled,
@@ -265,9 +279,11 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
             }
 
             itemDom = (
+                // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
                 <li
-                    role="menuitem"
-                    tabIndex={-1}
+                    // if role = menuitem, the narration will read all expanded li
+                    role={isSubNav ? null : "menuitem"}
+                    tabIndex={isSubNav ? -1 : tabIndex}
                     {...ariaProps}
                     style={style}
                     ref={this.setItemRef}
@@ -276,6 +292,7 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
                     onMouseEnter={onMouseEnter}
                     onMouseLeave={onMouseLeave}
                     onKeyPress={this.handleKeyPress}
+                    {...this.getDataAttr(this.props)}
                 >
                     {itemChildren}
                 </li>
@@ -286,7 +303,14 @@ export default class NavItem extends BaseComponent<NavItemProps, NavItemState> {
         if (isCollapsed && !isInSubNav && !isSubNav || isCollapsed && isSubNav && disabled) {
             itemDom = this.wrapTooltip(itemDom);
         }
-
+        if (typeof this.context.renderWrapper === 'function') {
+            return this.context.renderWrapper({
+                itemElement: itemDom,
+                isSubNav: isSubNav,
+                isInSubNav: isInSubNav,
+                props: this.props
+            });
+        }
         return itemDom;
     }
 }

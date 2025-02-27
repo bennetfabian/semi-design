@@ -19,6 +19,7 @@ dist
 build
 _site
 packages/**/lib
+packages/**/workerLib
 packages/semi-theme-default/css/semi.css
 packages/semi-theme-default/semi.scss
 public
@@ -26,6 +27,7 @@ storybook-static/
 *.zip
 cypress/videos/
 cypress/screenshots/
+cypress/downloads/
 
 # misc
 .env.local
@@ -221,9 +223,13 @@ fastlane/readme.md
 
 ### VisualStudioCode ###
 # .vscode/
+.history
 
 # metro
 tmp
 
 # test
 /__snapshots__/
+
+
+.vscode

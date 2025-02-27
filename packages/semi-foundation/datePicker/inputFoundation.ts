@@ -1,19 +1,23 @@
-/* eslint-disable max-len */
-import { cloneDeep, isObject, set } from 'lodash';
+import { isObject, set, get } from 'lodash';
+import { format as formatFn } from 'date-fns';
 
 import BaseFoundation, { DefaultAdapter } from '../base/foundation';
-import { BaseValueType, ValidateStatus } from './foundation';
+import { BaseValueType, ValidateStatus, ValueType } from './foundation';
 import { formatDateValues } from './_utils/formatter';
 import { getDefaultFormatTokenByType } from './_utils/getDefaultFormatToken';
 import getInsetInputFormatToken from './_utils/getInsetInputFormatToken';
 import getInsetInputValueFromInsetInputStr from './_utils/getInsetInputValueFromInsetInputStr';
 import { strings } from './constants';
+import getDefaultPickerDate from './_utils/getDefaultPickerDate';
+import { compatibleParse } from './_utils/parser';
+import { isValidDate } from './_utils';
+import copy from 'fast-copy';
 
 const KEY_CODE_ENTER = 'Enter';
 const KEY_CODE_TAB = 'Tab';
 
 
-export type Type = 'date' | 'dateRange' | 'year' | 'month' | 'dateTime' | 'dateTimeRange';
+export type Type = 'date' | 'dateRange' | 'year' | 'month' | 'dateTime' | 'dateTimeRange' | 'monthRange';
 export type RangeType = 'rangeStart' | 'rangeEnd';
 export type PanelType = 'left' | 'right';
 
@@ -26,40 +30,52 @@ export interface DateInputEventHandlerProps {
     onClear?: (e: any) => void;
     onRangeInputClear?: (e: any) => void;
     onRangeEndTabPress?: (e: any) => void;
-    onInsetInputChange?: (options: InsetInputChangeProps) => void;
+    onInsetInputChange?: (options: InsetInputChangeProps) => void
 }
 
 export interface DateInputElementProps {
+    borderless?: boolean;
     insetLabel?: any;
-    prefix?: any;
+    prefix?: any
+}
+
+export interface InsetInputProps {
+    placeholder?: {
+        dateStart?: string;
+        dateEnd?: string;
+        timeStart?: string;
+        timeEnd?: string
+    }
+    // showClear?: boolean
 }
 
 export interface DateInputFoundationProps extends DateInputElementProps, DateInputEventHandlerProps {
     [x: string]: any;
-    value?: BaseValueType[];
+    value?: Date[];
     disabled?: boolean;
     type?: Type;
     showClear?: boolean;
     format?: string;
-    inputStyle?: React.CSSProperties;
+    inputStyle?: Record<string, any>;
     inputReadOnly?: boolean;
     validateStatus?: ValidateStatus;
     prefixCls?: string;
     rangeSeparator?: string;
     panelType?: PanelType;
-    insetInput?: boolean;
+    insetInput?: boolean | InsetInputProps;
     insetInputValue?: InsetInputValue;
     density?: typeof strings.DENSITY_SET[number];
+    defaultPickerValue?: ValueType
 }
 
 export interface InsetInputValue {
     monthLeft: {
         dateInput: string;
-        timeInput: string;
-    },
+        timeInput: string
+    };
     monthRight: {
         dateInput: string;
-        timeInput: string;
+        timeInput: string
     }
 }
 
@@ -67,16 +83,16 @@ export interface InsetInputChangeFoundationProps {
     value: string;
     insetInputValue: InsetInputValue;
     event: any;
-    valuePath: string;
+    valuePath: string
 }
 
 export interface InsetInputChangeProps { 
     insetInputStr: string;
     format: string;
-    insetInputValue: InsetInputValue;
+    insetInputValue: InsetInputValue
 }
 
-export interface DateInputAdapter extends DefaultAdapter {
+export interface DateInputAdapter extends DefaultAdapter<DateInputFoundationProps, Record<string, any>> {
     updateIsFocusing: (isFocusing: boolean) => void;
     notifyClick: DateInputFoundationProps['onClick'];
     notifyChange: DateInputFoundationProps['onChange'];
@@ -87,7 +103,7 @@ export interface DateInputAdapter extends DefaultAdapter {
     notifyFocus: DateInputFoundationProps['onFocus'];
     notifyRangeInputClear: DateInputFoundationProps['onRangeInputClear'];
     notifyRangeInputFocus: DateInputFoundationProps['onFocus'];
-    notifyTabPress: DateInputFoundationProps['onRangeEndTabPress'];
+    notifyTabPress: DateInputFoundationProps['onRangeEndTabPress']
 }
 
 export default class InputFoundation extends BaseFoundation<DateInputAdapter> {
@@ -95,10 +111,8 @@ export default class InputFoundation extends BaseFoundation<DateInputAdapter> {
         super({ ...adapter });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
     init() {}
 
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
     destroy() {}
 
     handleClick(e: any) {
@@ -165,6 +179,9 @@ export default class InputFoundation extends BaseFoundation<DateInputAdapter> {
             case 'month':
                 text = formatDateValues(value, formatToken, undefined, dateFnsLocale);
                 break;
+            case 'monthRange':
+                text = formatDateValues(value, formatToken, { groupSize: 2, groupInnerSeparator: rangeSeparator }, dateFnsLocale);
+                break;
             default:
                 break;
         }
@@ -173,11 +190,54 @@ export default class InputFoundation extends BaseFoundation<DateInputAdapter> {
 
     handleInsetInputChange(options: InsetInputChangeFoundationProps) {
         const { value, valuePath, insetInputValue } = options;
-        const { format, type } = this._adapter.getProps();
+        const { format, type, rangeSeparator } = this._adapter.getProps();
         const insetFormatToken = getInsetInputFormatToken({ type, format });
-        const newInsetInputValue = set(cloneDeep(insetInputValue), valuePath, value);
-        const newInputValue = this.concatInsetInputValue({ insetInputValue: newInsetInputValue });
-        this._adapter.notifyInsetInputChange({ insetInputValue: newInsetInputValue, format: insetFormatToken, insetInputStr: newInputValue });
+        const newInsetInputValue = set(copy(insetInputValue), valuePath, value);
+        const insetInputStr = this.concatInsetInputValue({ insetInputValue: newInsetInputValue });
+        const parsedInsetInputValueFromInputStr = getInsetInputValueFromInsetInputStr({ inputValue: insetInputStr, type, rangeSeparator });
+        const filledTimeInsetInputValue = this._autoFillTimeToInsetInputValue({ insetInputValue: parsedInsetInputValueFromInputStr, valuePath, format: insetFormatToken });
+        const finalInsetInputStr = this.concatInsetInputValue({ insetInputValue: filledTimeInsetInputValue });
+        this._adapter.notifyInsetInputChange({ insetInputValue: filledTimeInsetInputValue, format: insetFormatToken, insetInputStr: finalInsetInputStr });
+    }
+
+    _autoFillTimeToInsetInputValue(options: { insetInputValue: InsetInputValue; format: string; valuePath: string}) {
+        const { valuePath, insetInputValue, format } = options;
+        const { type, defaultPickerValue, dateFnsLocale } = this._adapter.getProps();
+        const insetInputValueWithTime = copy(insetInputValue);
+        const { nowDate, nextDate } = getDefaultPickerDate({ defaultPickerValue, format, dateFnsLocale });
+
+        if (type.includes('Time')) {
+            let timeStr = '';
+            const dateFormatToken = get(format.split(' '), '0', strings.FORMAT_FULL_DATE);
+            const timeFormatToken = get(format.split(' '), '1', strings.FORMAT_TIME_PICKER);
+            
+            switch (valuePath) {
+                case 'monthLeft.dateInput':
+                    const dateLeftStr = insetInputValueWithTime.monthLeft.dateInput;
+                    if (!insetInputValueWithTime.monthLeft.timeInput && dateLeftStr.length === dateFormatToken.length) {
+                        const dateLeftParsed = compatibleParse(insetInputValueWithTime.monthLeft.dateInput, dateFormatToken);
+                        if (isValidDate(dateLeftParsed)) {
+                            timeStr = formatFn(nowDate, timeFormatToken);
+                            insetInputValueWithTime.monthLeft.timeInput = timeStr;
+                        }
+                    }
+                    break;
+                case 'monthRight.dateInput':
+                    const dateRightStr = insetInputValueWithTime.monthRight.dateInput;
+                    if (!insetInputValueWithTime.monthRight.timeInput && dateRightStr.length === dateFormatToken.length) {
+                        const dateRightParsed = compatibleParse(dateRightStr, dateFormatToken);
+                        if (isValidDate(dateRightParsed)) {
+                            timeStr = formatFn(nextDate, timeFormatToken);
+                            insetInputValueWithTime.monthRight.timeInput = timeStr;
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return insetInputValueWithTime;
     }
 
     /**
@@ -188,7 +248,7 @@ export default class InputFoundation extends BaseFoundation<DateInputAdapter> {
      * Otherwise the default format will be used as placeholder
      */
     getInsetInputPlaceholder() {
-        const { type, format } = this._adapter.getProps();
+        const { type, format, rangeSeparator } = this._adapter.getProps();
         const insetInputFormat = getInsetInputFormatToken({ type, format });
         let datePlaceholder, timePlaceholder;
 
@@ -201,6 +261,9 @@ export default class InputFoundation extends BaseFoundation<DateInputAdapter> {
             case 'dateTime':
             case 'dateTimeRange':
                 [datePlaceholder, timePlaceholder] = insetInputFormat.split(' ');
+                break;
+            case 'monthRange':
+                datePlaceholder = insetInputFormat + rangeSeparator + insetInputFormat;
                 break;
         }
 
@@ -215,7 +278,7 @@ export default class InputFoundation extends BaseFoundation<DateInputAdapter> {
      * 
      * Parse out insetInputValue from current date value or inputValue
      */
-    getInsetInputValue({ value, insetInputValue } : { value: BaseValueType[]; insetInputValue: InsetInputValue }) {
+    getInsetInputValue({ value, insetInputValue }: { value: BaseValueType[]; insetInputValue: InsetInputValue }) {
         const { type, rangeSeparator, format } = this._adapter.getProps();
 
         let inputValueStr = '';
@@ -246,6 +309,7 @@ export default class InputFoundation extends BaseFoundation<DateInputAdapter> {
         switch (type) {
             case 'date':
             case 'month':
+            case 'monthRange':
                 inputValue = insetInputValue.monthLeft.dateInput;
                 break;
             case 'dateRange':

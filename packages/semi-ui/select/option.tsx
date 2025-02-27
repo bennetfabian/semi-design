@@ -1,4 +1,3 @@
-/* eslint-disable max-len */
 import React, { PureComponent } from 'react';
 import classNames from 'classnames';
 import PropTypes from 'prop-types';
@@ -6,9 +5,10 @@ import { isString } from 'lodash';
 import { cssClasses } from '@douyinfe/semi-foundation/select/constants';
 import LocaleConsumer from '../locale/localeConsumer';
 import { IconTick } from '@douyinfe/semi-icons';
-import { getHighLightTextHTML } from '../_utils/index';
+import Highlight, { HighlightProps } from '../highlight';
 import { Locale } from '../locale/interface';
-import { BasicOptionProps } from '@douyinfe/semi-foundation/select/optionFoundation';
+import getDataAttr from '@douyinfe/semi-foundation/utils/getDataAttr';
+import type { BasicOptionProps } from '@douyinfe/semi-foundation/select/optionFoundation';
 
 export interface OptionProps extends BasicOptionProps {
     [x: string]: any;
@@ -18,16 +18,7 @@ export interface OptionProps extends BasicOptionProps {
     disabled?: boolean;
     showTick?: boolean;
     className?: string;
-    style?: React.CSSProperties;
-}
-interface renderOptionContentArgument {
-    config: {
-        searchWords: any;
-        sourceString: React.ReactNode;
-    };
-    children: React.ReactNode;
-    inputValue: string;
-    prefixCls: string;
+    style?: React.CSSProperties
 }
 class Option extends PureComponent<OptionProps> {
     static isSelectOption = true;
@@ -63,9 +54,15 @@ class Option extends PureComponent<OptionProps> {
         }
     }
 
-    renderOptionContent({ config, children, inputValue, prefixCls }: renderOptionContentArgument) {
+    renderOptionContent({ config, children, inputValue, prefixCls }) {
         if (isString(children) && inputValue) {
-            return getHighLightTextHTML(config as any);
+            return (
+                <Highlight
+                    searchWords={config.searchWords as HighlightProps['searchWords']}
+                    sourceString={config.sourceString as string}
+                    highlightClassName={config.highlightClassName as string}
+                />
+            );
         }
         return children;
     }
@@ -88,6 +85,7 @@ class Option extends PureComponent<OptionProps> {
             prefixCls,
             renderOptionItem,
             inputValue,
+            semiOptionId,
             ...rest
         } = this.props;
         const optionClassName = classNames(prefixCls, {
@@ -105,13 +103,23 @@ class Option extends PureComponent<OptionProps> {
             }
             return (
                 <LocaleConsumer<Locale['Select']> componentName="Select">
-                    {(locale: Locale['Select']) => <div className={optionClassName}>{emptyContent || locale.emptyText}</div>}
+                    {(locale: Locale['Select']) => (
+                        <div className={optionClassName} x-semi-prop="emptyContent">
+                            {emptyContent || locale.emptyText}
+                        </div>
+                    )}
                 </LocaleConsumer>
             );
         }
 
         // Since there are empty, locale and other logic, the custom renderOptionItem is directly converged to the internal option instead of being placed in Select/index
         if (typeof renderOptionItem === 'function') {
+            const customRenderClassName = classNames(className,
+                {
+                    [`${prefixCls}-custom`]: true,
+                    [`${prefixCls}-custom-selected`]: selected
+                }
+            );
             return renderOptionItem({
                 disabled,
                 focused,
@@ -122,17 +130,17 @@ class Option extends PureComponent<OptionProps> {
                 inputValue,
                 onMouseEnter: (e: React.MouseEvent) => onMouseEnter(e),
                 onClick: (e: React.MouseEvent) => this.onClick({ value, label, children, ...rest }, e),
+                className: customRenderClassName,
                 ...rest
             });
         }
 
         const config = {
-            searchWords: inputValue,
+            searchWords: [inputValue],
             sourceString: children,
-            option: {
-                highlightClassName: `${prefixCls}-keyword`
-            }
+            highlightClassName: `${prefixCls}-keyword`
         };
+
         return (
             // eslint-disable-next-line jsx-a11y/interactive-supports-focus,jsx-a11y/click-events-have-key-events
             <div
@@ -142,9 +150,11 @@ class Option extends PureComponent<OptionProps> {
                 }}
                 onMouseEnter={e => onMouseEnter && onMouseEnter(e)}
                 role="option"
+                id={semiOptionId}
                 aria-selected={selected ? "true" : "false"}
                 aria-disabled={disabled ? "true" : "false"}
                 style={style}
+                {...getDataAttr(rest)}
             >
                 {showTick ? (
                     <div className={selectedIconClassName}>
